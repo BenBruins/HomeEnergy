@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "353703123121",
+    "firebase_url": "https://yatze-2032d-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "yatze-2032d",
+    "storage_bucket": "yatze-2032d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:353703123121:android:96a45bd0486f0fa7872a90",
+        "android_client_info": {
+          "package_name": "Yatze.Test"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfRSxxHQTKnYXmvjrpOzcbA38vZbs9J98"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:353703123121:android:96a45bd0486f0fa7872a90",
+        "android_client_info": {
+          "package_name": "com.example.energiehuishouding"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfRSxxHQTKnYXmvjrpOzcbA38vZbs9J98"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
