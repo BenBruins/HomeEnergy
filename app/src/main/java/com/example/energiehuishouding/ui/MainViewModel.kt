@@ -117,6 +117,27 @@ class MainViewModel(
             // changes the range or background work happens to run.
             syncHistory()
         }
+        viewModelScope.launch {
+            repository.p1Data.collect { p1 ->
+                if (p1 != null) {
+                    val l1W = p1.activePowerL1W ?: ((p1.activeCurrentL1A ?: 0.0) * 230.0)
+                    val l2W = p1.activePowerL2W ?: ((p1.activeCurrentL2A ?: 0.0) * 230.0)
+                    val l3W = p1.activePowerL3W ?: ((p1.activeCurrentL3A ?: 0.0) * 230.0)
+
+                    val l1A = p1.activeCurrentL1A ?: (if (l1W > 0) l1W / 230.0 else 0.0)
+                    val l2A = p1.activeCurrentL2A ?: (if (l2W > 0) l2W / 230.0 else 0.0)
+                    val l3A = p1.activeCurrentL3A ?: (if (l3W > 0) l3W / 230.0 else 0.0)
+
+                    val nowMs = System.currentTimeMillis()
+                    if (nowMs - lastPhaseUpdateMs >= 2000L) {
+                        lastPhaseUpdateMs = nowMs
+                        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(nowMs))
+                        val newPoint = LivePhasePoint(timeStr, l1W, l2W, l3W, l1A, l2A, l3A)
+                        _livePhaseHistory.update { (it + newPoint).takeLast(60) }
+                    }
+                }
+            }
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -137,23 +158,18 @@ class MainViewModel(
         }
     }.flatMapLatest { it }
 
+    private val chartDataFlow = combine(summaryDataFlow, _startDate) { summaries, startMs ->
+        processSummaries(summaries, startMs)
+    }.flowOn(kotlinx.coroutines.Dispatchers.Default)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private val lastKnownSummaryFlow = flow {
-        while(true) {
+        while (true) {
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
             emit(repository.getLatestAbsoluteStandBefore(todayStr))
             delay(10.seconds)
         }
-    }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val todaySummaryFlow = flow {
-        while (true) {
-            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            emitAll(repository.getTodaySummaryFlow(todayStr))
-            delay(10.seconds)
-        }
-    }
+    }.distinctUntilChanged()
 
     private val livePollingFlow = flow {
         while (true) {
@@ -172,7 +188,7 @@ class MainViewModel(
     val uiState: StateFlow<DashboardUiState> = combine(
         summaryDataFlow, repository.p1Data, repository.batteryData, repository.liveSolarWatts,
         repository.connectionStatus, settingsFlow, _isRefreshing, _startDate, _visibleSeries, _selectedRange, _failedRanges,
-        repository.getAllRatePeriods(), _costResults, lastKnownSummaryFlow, livePollingFlow, _viewMode, _livePhaseHistory, todaySummaryFlow
+        repository.getAllRatePeriods(), _costResults, lastKnownSummaryFlow, livePollingFlow, _viewMode, _livePhaseHistory, chartDataFlow
     ) { args ->
         try {
             val summaries = args[0] as List<Any>
@@ -183,26 +199,7 @@ class MainViewModel(
             val rates = args[11] as List<RatePeriod>; val costRes = args[12] as List<CostBreakdown>
             val lastStand = args[13] as DailySummary?; val mode = args[15] as ViewMode
             val phaseHistory = args[16] as List<LivePhasePoint>
-
-            if (p1 != null) {
-                val l1W = p1.activePowerL1W ?: ((p1.activeCurrentL1A ?: 0.0) * 230.0)
-                val l2W = p1.activePowerL2W ?: ((p1.activeCurrentL2A ?: 0.0) * 230.0)
-                val l3W = p1.activePowerL3W ?: ((p1.activeCurrentL3A ?: 0.0) * 230.0)
-
-                val l1A = p1.activeCurrentL1A ?: (if (l1W > 0) l1W / 230.0 else 0.0)
-                val l2A = p1.activeCurrentL2A ?: (if (l2W > 0) l2W / 230.0 else 0.0)
-                val l3A = p1.activeCurrentL3A ?: (if (l3W > 0) l3W / 230.0 else 0.0)
-
-                val nowMs = System.currentTimeMillis()
-                if (nowMs - lastPhaseUpdateMs >= 2000L) {
-                    lastPhaseUpdateMs = nowMs
-                    val timeStr = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(nowMs))
-                    val newPoint = LivePhasePoint(timeStr, l1W, l2W, l3W, l1A, l2A, l3A)
-                    viewModelScope.launch {
-                        _livePhaseHistory.value = (_livePhaseHistory.value + newPoint).takeLast(60)
-                    }
-                }
-            }
+            val chartPoints = args[17] as List<ChartDataPoint>
 
             // HomeWizard also reports a total active_power_w value. On some P1
             // meters that total can lag or differ from the per-phase readings;
@@ -303,7 +300,7 @@ class MainViewModel(
                 batteryInTodayKwh = batInToday, batteryOutTodayKwh = batOutToday,
                 gasTodayM3 = if (isCurrentMonth) gasToday else computedPeriodGas, periodGasM3 = computedPeriodGas,
                 liveSolarPower = liveSolar, gridPowerWatts = gridPower, batteryPowerWatts = batPower, housePowerWatts = housePower,
-                connectionStatus = conn, chartData = processSummaries(summaries), visibleSeries = visible,
+                connectionStatus = conn, chartData = chartPoints, visibleSeries = visible,
                 selectedRange = range, failedRanges = failed, isRefreshing = refreshing, startDate = startMs, minX = computedMinX, maxX = computedMaxX,
                 inverterIp = settings[0] as? String ?: "", p1Ip = settings[1] as? String ?: "", batteryIp = settings[2] as? String ?: "",
                 batteryLocalToken = settings[3] as? String ?: "", appKey = settings[5] as? String ?: "", appSecret = settings[6] as? String ?: "",
@@ -316,9 +313,9 @@ class MainViewModel(
         } catch (e: Exception) { Log.e("MainViewModel", "UI State Error", e); DashboardUiState(error = "Fout: ${e.message}") }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
-    private fun processSummaries(data: List<Any>): List<ChartDataPoint> {
-        val res = mutableListOf<ChartDataPoint>()
-        val prefix = SimpleDateFormat("yyyy-MM", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(_startDate.value))
+    private fun processSummaries(data: List<Any>, startMs: Long): List<ChartDataPoint> {
+        val res = ArrayList<ChartDataPoint>(data.size * 6)
+        val prefix = SimpleDateFormat("yyyy-MM", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(startMs))
         val currentMonthPrefix = SimpleDateFormat("yyyy-MM", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val isCurrentMonth = prefix == currentMonthPrefix

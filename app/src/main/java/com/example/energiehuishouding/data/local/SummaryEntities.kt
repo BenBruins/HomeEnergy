@@ -1,9 +1,16 @@
 package com.example.energiehuishouding.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "daily_summaries")
+@Entity(
+    tableName = "daily_summaries",
+    indices = [
+        Index(value = ["timestamp"]),
+        Index(value = ["date"])
+    ]
+)
 data class DailySummary(
     @PrimaryKey val date: String, // yyyy-MM-dd
     val timestamp: Long,
@@ -37,7 +44,13 @@ data class DailySummary(
     val p1DayFinalized: Boolean = false
 )
 
-@Entity(tableName = "monthly_summaries")
+@Entity(
+    tableName = "monthly_summaries",
+    indices = [
+        Index(value = ["timestamp"]),
+        Index(value = ["month"])
+    ]
+)
 data class MonthlySummary(
     @PrimaryKey val month: String, // yyyy-MM
     val timestamp: Long,
@@ -56,7 +69,13 @@ data class MonthlySummary(
     val absGasM3: Double = 0.0
 )
 
-@Entity(tableName = "yearly_summaries")
+@Entity(
+    tableName = "yearly_summaries",
+    indices = [
+        Index(value = ["timestamp"]),
+        Index(value = ["year"])
+    ]
+)
 data class YearlySummary(
     @PrimaryKey val year: String, // yyyy
     val timestamp: Long,

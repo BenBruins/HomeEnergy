@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         YearlySummary::class,
         RatePeriod::class
     ], 
-    version = 24, 
+    version = 25, 
     exportSchema = false
 )
 abstract class SolarDatabase : RoomDatabase() {
@@ -156,6 +156,18 @@ abstract class SolarDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_daily_summaries_timestamp ON daily_summaries (timestamp)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_daily_summaries_date ON daily_summaries (date)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_monthly_summaries_timestamp ON monthly_summaries (timestamp)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_monthly_summaries_month ON monthly_summaries (month)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_yearly_summaries_timestamp ON yearly_summaries (timestamp)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_yearly_summaries_year ON yearly_summaries (year)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_rate_periods_endDate ON rate_periods (endDate)")
+            }
+        }
+
         @Volatile
         private var INSTANCE: SolarDatabase? = null
 
@@ -169,7 +181,7 @@ abstract class SolarDatabase : RoomDatabase() {
                 .addMigrations(
                     MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, 
                     MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22,
-                    MIGRATION_22_23, MIGRATION_23_24
+                    MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25
                 )
                 .fallbackToDestructiveMigration()
                 .build()

@@ -56,7 +56,7 @@ interface SolarDao {
     fun getLatestAbsoluteStandBefore(date: String): Flow<DailySummary?>
 
     @Query("SELECT * FROM daily_summaries WHERE date < :date AND (absGridImportKwh > 0 OR absGasM3 > 0) ORDER BY date DESC LIMIT 1")
-    fun getLatestAbsoluteStandBeforeOnce(date: String): DailySummary?
+    suspend fun getLatestAbsoluteStandBeforeOnce(date: String): DailySummary?
 
     @Query("SELECT * FROM daily_summaries WHERE date < :date AND absGasM3 > 0.001 ORDER BY date DESC LIMIT 1")
     suspend fun getLatestGasStandBefore(date: String): DailySummary?
@@ -114,6 +114,6 @@ interface SolarDao {
     @Query("DELETE FROM rate_periods WHERE id = :id")
     suspend fun deleteRatePeriod(id: Long)
 
-    @Query("SELECT * FROM daily_summaries WHERE length(:start) >= 0 AND length(:end) >= 0")
+    @Query("SELECT * FROM daily_summaries WHERE date BETWEEN :start AND :end ORDER BY date ASC")
     suspend fun getDailySummariesRangeOnce(start: String, end: String): List<DailySummary>
 }

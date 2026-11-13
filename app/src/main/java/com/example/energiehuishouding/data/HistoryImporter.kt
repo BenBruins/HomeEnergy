@@ -16,6 +16,7 @@ import java.util.TimeZone
 
 class HistoryImporter(private val context: Context) {
     companion object {
+        private val NON_DIGIT_REGEX = Regex("[^0-9\\-:/\\.]")
         private val dateFormats = listOf(
             SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US),
             SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.US),
@@ -26,7 +27,7 @@ class HistoryImporter(private val context: Context) {
 
         fun parseDate(str: String): Long {
             if (str.isBlank()) return 0L
-            val clean = str.replace(Regex("[^0-9\\-:/\\.]"), " ").trim()
+            val clean = str.replace(NON_DIGIT_REGEX, " ").trim()
             val digitsOnly = clean.split(" ", "-", ".", "/", ":").filter { it.isNotEmpty() }
             val utcZone = TimeZone.getTimeZone("UTC")
             if (digitsOnly.size == 1 && digitsOnly[0].length == 4) {

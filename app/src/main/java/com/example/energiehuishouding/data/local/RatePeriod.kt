@@ -1,9 +1,15 @@
 package com.example.energiehuishouding.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "rate_periods")
+@Entity(
+    tableName = "rate_periods",
+    indices = [
+        Index(value = ["endDate"])
+    ]
+)
 data class RatePeriod(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val endDate: String,   // yyyy-MM-dd

@@ -137,14 +137,15 @@ fun SolarChart(
         LaunchedEffect(chartData, visibleSeriesList) {
             if (chartData.isEmpty() || visibleSeriesList.isEmpty()) return@LaunchedEffect
             val xPoints = chartData.map { it.x.roundToInt().toFloat() }.distinct().sorted()
+            val dataMap = HashMap<Pair<Float, String>, Float>(chartData.size)
+            chartData.forEach { pt ->
+                dataMap[pt.x.roundToInt().toFloat() to pt.seriesName] = pt.y
+            }
 
             modelProducer.runTransaction {
                 columnSeries {
                     visibleSeriesList.forEach { name ->
-                        series(xPoints, xPoints.map { x ->
-                            // Use average if multiple points exist for the same X (should not happen, but safety first)
-                            chartData.filter { it.x.roundToInt().toFloat() == x && it.seriesName == name }.map { it.y }.firstOrNull() ?: 0f
-                        })
+                        series(xPoints, xPoints.map { x -> dataMap[x to name] ?: 0f })
                     }
                 }
             }
@@ -242,6 +243,21 @@ fun LivePhaseChart(
     val l2Color = Color(0xFFFF9800) // Orange
     val l3Color = Color(0xFF9C27B0) // Purple
 
+    val (minVal, maxVal) = remember(history) {
+        var minV = 0.0
+        var maxV = 100.0
+        if (history.isNotEmpty()) {
+            minV = history.minOf { minOf(it.l1W, it.l2W, it.l3W) }
+            maxV = history.maxOf { maxOf(it.l1W, it.l2W, it.l3W) }
+        }
+        if (minV > 0.0) minV = 0.0
+        minV to maxV
+    }
+
+    val pathL1 = remember { Path() }
+    val pathL2 = remember { Path() }
+    val pathL3 = remember { Path() }
+
     Column(modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), shape = MaterialTheme.shapes.medium).padding(12.dp)) {
         Text("Actuele 3-Fasen Belasting (Live Rolling)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
 
@@ -250,12 +266,6 @@ fun LivePhaseChart(
         Canvas(modifier = Modifier.weight(1f).fillMaxWidth()) {
             val width = size.width
             val height = size.height
-
-            val allValues = history.flatMap { listOf(it.l1W, it.l2W, it.l3W) }
-            var minVal = allValues.minOrNull() ?: 0.0
-            var maxVal = allValues.maxOrNull() ?: 100.0
-
-            if (minVal > 0.0) minVal = 0.0
             val rangeVal = maxOf(30.0, (maxVal - minVal) * 1.15)
 
             // Grid lines
@@ -285,9 +295,9 @@ fun LivePhaseChart(
             if (history.size >= 2) {
                 val stepX = width / (history.size - 1).coerceAtLeast(1)
 
-                val pathL1 = Path()
-                val pathL2 = Path()
-                val pathL3 = Path()
+                pathL1.reset()
+                pathL2.reset()
+                pathL3.reset()
 
                 history.forEachIndexed { index, pt ->
                     val x = index * stepX
