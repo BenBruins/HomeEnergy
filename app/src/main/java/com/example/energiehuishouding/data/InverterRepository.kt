@@ -974,7 +974,15 @@ class InverterRepository(
             if (cur.absBatteryInKwh > 0.1 && (nextBInRec == null || nextBInRec.absBatteryInKwh >= cur.absBatteryInKwh || cur.p1SampleTimestamp == 0L)) lastBInRec = cur
             if (cur.absBatteryOutKwh > 0.1 && (nextBOutRec == null || nextBOutRec.absBatteryOutKwh >= cur.absBatteryOutKwh || cur.p1SampleTimestamp == 0L)) lastBOutRec = cur
 
-            updatedDaily.add(cur.copy(gridImportKwh = dImp, gridExportKwh = dExp, gasM3 = dGas, batteryInKwh = dBIn, batteryOutKwh = dBOut))
+            updatedDaily.add(cur.copy(
+                gridImportKwh = dImp,
+                gridExportKwh = dExp,
+                gasM3 = dGas,
+                batteryInKwh = dBIn,
+                batteryOutKwh = dBOut,
+                p1DayStartImportAbsKwh = if (lastImpRec != null && lastImpRec.absGridImportKwh > 0.1) lastImpRec.absGridImportKwh else cur.p1DayStartImportAbsKwh,
+                p1DayStartExportAbsKwh = if (lastExpRec != null && lastExpRec.absGridExportKwh > 0.1) lastExpRec.absGridExportKwh else cur.p1DayStartExportAbsKwh
+            ))
         }
         solarDao.insertDailySummaries(updatedDaily)
 
