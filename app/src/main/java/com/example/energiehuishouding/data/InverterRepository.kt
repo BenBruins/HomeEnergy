@@ -487,19 +487,49 @@ class InverterRepository(
         val midnightExpRaw = midnightExp?.let { if (it.rawGridExportKwh > 0.0) it.rawGridExportKwh else (it.absGridExportKwh - it.gridExportOffsetKwh).coerceAtLeast(0.0) }
         val prevExpRaw = prevExp?.let { if (it.rawGridExportKwh > 0.0) it.rawGridExportKwh else (it.absGridExportKwh - it.gridExportOffsetKwh).coerceAtLeast(0.0) }
 
+        val p1BaselineDate = settingsRepository.p1BaselineDate.first()
+        val savedBaselineImp = if (p1BaselineDate == date) settingsRepository.p1ImportBaseline.first() else null
+        val savedBaselineExp = if (p1BaselineDate == date) settingsRepository.p1ExportBaseline.first() else null
+
+        val interpolatedStartImp = if (savedBaselineImp != null && savedBaselineImp > 0.0) {
+            savedBaselineImp
+        } else if (prevImp != null && prevImp.p1SampleTimestamp > 0 && prevImp.p1SampleTimestamp < dayStartMs && ts > dayStartMs) {
+            val prevTs = prevImp.p1SampleTimestamp
+            val prevRaw = if (prevImp.rawGridImportKwh > 0.0) prevImp.rawGridImportKwh else (prevImp.absGridImportKwh - prevImp.gridImportOffsetKwh).coerceAtLeast(0.0)
+            if (prevRaw > 0.0 && readingImp >= prevRaw) {
+                val totalGap = (ts - prevTs).toDouble()
+                val gapToMidnight = (dayStartMs - prevTs).toDouble()
+                if (totalGap > 0.0 && gapToMidnight >= 0.0) {
+                    val fraction = (gapToMidnight / totalGap).coerceIn(0.0, 1.0)
+                    prevRaw + (readingImp - prevRaw) * fraction
+                } else prevRaw
+            } else readingImp
+        } else midnightImpRaw ?: prevImpRaw ?: readingImp
+
+        val interpolatedStartExp = if (savedBaselineExp != null && savedBaselineExp > 0.0) {
+            savedBaselineExp
+        } else if (prevExp != null && prevExp.p1SampleTimestamp > 0 && prevExp.p1SampleTimestamp < dayStartMs && ts > dayStartMs) {
+            val prevTs = prevExp.p1SampleTimestamp
+            val prevRaw = if (prevExp.rawGridExportKwh > 0.0) prevExp.rawGridExportKwh else (prevExp.absGridExportKwh - prevExp.gridExportOffsetKwh).coerceAtLeast(0.0)
+            if (prevRaw > 0.0 && readingExp >= prevRaw) {
+                val totalGap = (ts - prevTs).toDouble()
+                val gapToMidnight = (dayStartMs - prevTs).toDouble()
+                if (totalGap > 0.0 && gapToMidnight >= 0.0) {
+                    val fraction = (gapToMidnight / totalGap).coerceIn(0.0, 1.0)
+                    prevRaw + (readingExp - prevRaw) * fraction
+                } else prevRaw
+            } else readingExp
+        } else midnightExpRaw ?: prevExpRaw ?: readingExp
+
         val dayStartImportAbs = existing?.p1DayBaselineTimestamp?.takeIf { it > 0 }
             ?.let { existing.p1DayStartImportAbsKwh }
-            ?.takeIf { it > 0 }
-            ?: midnightImpRaw?.takeIf { readingImp >= it && (readingImp - it) <= 50.0 }
-            ?: prevImpRaw?.takeIf { readingImp >= it && (readingImp - it) <= 50.0 }
-            ?: readingImp
+            ?.takeIf { it > 0 && savedBaselineImp == null }
+            ?: interpolatedStartImp
 
         val dayStartExportAbs = existing?.p1DayBaselineTimestamp?.takeIf { it > 0 }
             ?.let { existing.p1DayStartExportAbsKwh }
-            ?.takeIf { it > 0 }
-            ?: midnightExpRaw?.takeIf { readingExp >= it && (readingExp - it) <= 50.0 }
-            ?: prevExpRaw?.takeIf { readingExp >= it && (readingExp - it) <= 50.0 }
-            ?: readingExp
+            ?.takeIf { it > 0 && savedBaselineExp == null }
+            ?: interpolatedStartExp
 
         val previousDaySummary = solarDao.getDailySummary(previousDate)
         if (previousDaySummary != null && !previousDaySummary.p1DayFinalized) {
@@ -1038,6 +1068,27 @@ class InverterRepository(
     suspend fun deleteRatePeriod(id: Long) = solarDao.deleteRatePeriod(id)
     suspend fun getDailySummaryOnce(date: String): DailySummary? = withContext(Dispatchers.IO) {
         solarDao.getDailySummary(date)
+    }
+
+    suspend fun setTodayP1Totals(importKwh: Double, exportKwh: Double) = withContext(Dispatchers.IO) {
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val existing = solarDao.getDailySummary(todayStr)
+        if (existing != null) {
+            val rawImp = if (existing.rawGridImportKwh > 0.0) existing.rawGridImportKwh else existing.absGridImportKwh
+            val rawExp = if (existing.rawGridExportKwh > 0.0) existing.rawGridExportKwh else existing.absGridExportKwh
+            if (rawImp > 0.0) {
+                val newStartImp = (rawImp - importKwh).coerceAtLeast(0.0)
+                val newStartExp = (rawExp - exportKwh).coerceAtLeast(0.0)
+                settingsRepository.resetP1Baselines(todayStr, newStartImp, newStartExp)
+                solarDao.insertDailySummaries(listOf(existing.copy(
+                    p1DayStartImportAbsKwh = newStartImp,
+                    p1DayStartExportAbsKwh = newStartExp,
+                    p1DayBaselineTimestamp = System.currentTimeMillis(),
+                    gridImportKwh = importKwh,
+                    gridExportKwh = exportKwh
+                )))
+            }
+        }
     }
 
     suspend fun getDailySummariesRangeOnce(start: String, end: String) = solarDao.getDailySummariesRangeOnce(start, end)

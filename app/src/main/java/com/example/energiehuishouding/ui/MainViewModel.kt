@@ -383,6 +383,7 @@ class MainViewModel(
     fun toggleSeriesVisibility(name: String) { _visibleSeries.value = if (_visibleSeries.value.contains(name)) _visibleSeries.value - name else _visibleSeries.value + name }
     fun clearEnergyData() { viewModelScope.launch { repository.clearEnergyDataOnly() } }
     fun recalculateTotals() { viewModelScope.launch { _isRefreshing.value = true; repository.triggerFullRecalculation(); _isRefreshing.value = false } }
+    fun setTodayP1Totals(importKwh: Double, exportKwh: Double) { viewModelScope.launch { repository.setTodayP1Totals(importKwh, exportKwh) } }
     fun updateSettings(inv: String, p1: String, bat: String, batToken: String, ak: String, sec: String, pid: String, apiKey: String, gatewayToken: String, brand: String, seApiKey: String, seSiteId: String) {
         viewModelScope.launch {
             settingsRepository.saveInverterIp(inv.trim()); settingsRepository.saveInverterBrand(brand)

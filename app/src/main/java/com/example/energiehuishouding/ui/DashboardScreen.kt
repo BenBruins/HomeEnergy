@@ -278,7 +278,8 @@ fun DashboardScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 exportLauncher.launch("energy_${type.lowercase()}_${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.csv")
             },
             onClearEnergyData = { viewModel.clearEnergyData() },
-            onRecalculate = { viewModel.recalculateTotals() }
+            onRecalculate = { viewModel.recalculateTotals() },
+            onCalibrateToday = { imp, exp -> viewModel.setTodayP1Totals(imp, exp) }
         )
     }
 
@@ -309,7 +310,8 @@ fun SettingsDialog(
     onDeleteRate: (Long) -> Unit,
     onExport: (String) -> Unit,
     onClearEnergyData: () -> Unit,
-    onRecalculate: () -> Unit
+    onRecalculate: () -> Unit,
+    onCalibrateToday: (Double, Double) -> Unit
 ) {
     var activeSubMenu by remember { mutableStateOf<String?>(null) }
     if (activeSubMenu == null) {
@@ -330,7 +332,7 @@ fun SettingsDialog(
     when (activeSubMenu) {
         "local" -> LocalDevicesDialog(uiState, { activeSubMenu = null }, onSave)
         "rates" -> RatesManagementDialog(uiState, { activeSubMenu = null }, onAddRate, onDeleteRate)
-        "data" -> DataManagementDialog(uiState, onMeterImport, onBatteryImport, onGasImport, onRatesImport, { activeSubMenu = null }, onExport, onClearEnergyData, onRecalculate)
+        "data" -> DataManagementDialog(uiState, onMeterImport, onBatteryImport, onGasImport, onRatesImport, { activeSubMenu = null }, onExport, onClearEnergyData, onRecalculate, onCalibrateToday)
         "cloud" -> CloudApiDialog(uiState, { activeSubMenu = null }, onSave)
     }
 }
@@ -346,7 +348,31 @@ fun SettingsMenuButton(label: String, icon: ImageVector, onClick: () -> Unit) {
 }
 
 @Composable
-fun DataManagementDialog(uiState: DashboardUiState, onMeterImport: () -> Unit, onBatteryImport: () -> Unit, onGasImport: () -> Unit, onRatesImport: () -> Unit, onDismiss: () -> Unit, onExport: (String) -> Unit, onClear: () -> Unit, onRecalc: () -> Unit) {
+fun DataManagementDialog(
+    uiState: DashboardUiState,
+    onMeterImport: () -> Unit,
+    onBatteryImport: () -> Unit,
+    onGasImport: () -> Unit,
+    onRatesImport: () -> Unit,
+    onDismiss: () -> Unit,
+    onExport: (String) -> Unit,
+    onClear: () -> Unit,
+    onRecalc: () -> Unit,
+    onCalibrateToday: (Double, Double) -> Unit
+) {
+    var showCalibrateDialog by remember { mutableStateOf(false) }
+
+    if (showCalibrateDialog) {
+        CalibrateTodayDialog(
+            uiState = uiState,
+            onDismiss = { showCalibrateDialog = false },
+            onCalibrate = { imp, exp ->
+                onCalibrateToday(imp, exp)
+                showCalibrateDialog = false
+            }
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Data Beheer") },
@@ -365,11 +391,55 @@ fun DataManagementDialog(uiState: DashboardUiState, onMeterImport: () -> Unit, o
                 }
                 HorizontalDivider()
                 Text("Acties", style = MaterialTheme.typography.labelLarge, color = Color.Red)
+                OutlinedButton({ showCalibrateDialog = true }, Modifier.fillMaxWidth()) { Text("Herijk Net-Vandaag Standen") }
                 Button(onRecalc, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Herbereken") }
                 OutlinedButton(onClear, Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)) { Text("Wis alle data") }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Terug") } }
+    )
+}
+
+@Composable
+fun CalibrateTodayDialog(
+    uiState: DashboardUiState,
+    onDismiss: () -> Unit,
+    onCalibrate: (Double, Double) -> Unit
+) {
+    var importText by remember { mutableStateOf(if (uiState.gridImportTodayKwh > 0) String.format(Locale.US, "%.2f", uiState.gridImportTodayKwh) else "2.90") }
+    var exportText by remember { mutableStateOf(if (uiState.gridExportTodayKwh > 0) String.format(Locale.US, "%.2f", uiState.gridExportTodayKwh) else "0.19") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Herijk Net-Vandaag Standen") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Voer de werkelijke kWh standen in voor vandaag (bijv. van je energieleverancier of P1 meter app):", style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    value = importText,
+                    onValueChange = { importText = it },
+                    label = { Text("Geïmporteerd vandaag (kWh)") }
+                )
+                OutlinedTextField(
+                    value = exportText,
+                    onValueChange = { exportText = it },
+                    label = { Text("Geëxporteerd vandaag (kWh)") }
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val imp = importText.replace(",", ".").toDoubleOrNull() ?: 0.0
+                val exp = exportText.replace(",", ".").toDoubleOrNull() ?: 0.0
+                onCalibrate(imp, exp)
+                onDismiss()
+            }) {
+                Text("Toepassen")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuleren") }
+        }
     )
 }
 
